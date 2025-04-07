@@ -20,18 +20,13 @@ In each iteration, you pick which version of the image looks best; the app spawn
 
 1. **Clone or download** this repository:
     ```bash
-    git clone https://github.com/YourUsername/zx-spectrum-interactive.git
-    cd zx-spectrum-interactive
+    git clone https://github.com/xanax/zx-graphics-converter.git
+    cd zx-graphics-converter
     ```
 2. **Install dependencies** (Python 3.7+ recommended):
     ```bash
-    pip install -r requirements.txt
+    pip install pillow numpy PyQt5
     ```
-   If you don’t have a `requirements.txt`, just make sure you install:
-   - **Pillow**
-   - **numpy**
-   - **PyQt5**
-
 3. **Run the script** with:
     ```bash
     python zx_interactive.py input.jpg output.png
@@ -52,8 +47,7 @@ In each iteration, you pick which version of the image looks best; the app spawn
 zx-spectrum-interactive/
   ├─ zx_interactive.py         # Main Python script with the interactive GUI
   ├─ README.md                 # This file
-  ├─ requirements.txt          # Dependencies (if you choose to provide one)
-  └─ LICENSE                   # Your chosen license
+
 ```
 
 - **`zx_interactive.py`**: The entire interactive logic, including:
