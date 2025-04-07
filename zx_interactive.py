@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ZX Spectrum Image Converter – Interactive Hill Climb Only
-with Pan, Brightness, Contrast, and Sharpen factors,
+with Pan, Brightness, Contrast, Sharpen, and now Color factors,
 and background-thread neighbor computation.
 
 Usage:
@@ -116,21 +116,23 @@ def convert_canvas_to_zx(img_array):
                 mixed_count += 1
     return output, mixed_count
 
-def apply_enhancements(pil_img, brightness, contrast, sharpen):
-    """Apply brightness, contrast, and sharpen in sequence."""
+def apply_enhancements(pil_img, brightness, contrast, sharpen, color):
+    """Apply brightness, contrast, sharpen, and color in sequence."""
     # Brightness
     pil_img = ImageEnhance.Brightness(pil_img).enhance(brightness)
     # Contrast
     pil_img = ImageEnhance.Contrast(pil_img).enhance(contrast)
     # Sharpen
     pil_img = ImageEnhance.Sharpness(pil_img).enhance(sharpen)
+    # Color (saturation)
+    pil_img = ImageEnhance.Color(pil_img).enhance(color)
     return pil_img
 
-def convert_with_params(original_image, x_offset, y_offset, brightness, contrast, sharpen):
+def convert_with_params(original_image, x_offset, y_offset, brightness, contrast, sharpen, color):
     """
     Given the original full-size image, do:
       1) Convert to RGB, resize to (ZX_WIDTH+8)x(ZX_HEIGHT+8)
-      2) Apply brightness, contrast, sharpen
+      2) Apply brightness, contrast, sharpen, color
       3) Crop [y_offset : y_offset+192, x_offset : x_offset+256]
       4) Convert to ZX palette
     Returns (PIL.Image, mixed_count).
@@ -138,7 +140,7 @@ def convert_with_params(original_image, x_offset, y_offset, brightness, contrast
     canvas_w = ZX_WIDTH + 8
     canvas_h = ZX_HEIGHT + 8
     big_img = original_image.convert("RGB").resize((canvas_w, canvas_h), Image.LANCZOS)
-    big_img = apply_enhancements(big_img, brightness, contrast, sharpen)
+    big_img = apply_enhancements(big_img, brightness, contrast, sharpen, color)
 
     arr = np.array(big_img)
     cropped = arr[y_offset : y_offset+ZX_HEIGHT, x_offset : x_offset+ZX_WIDTH, :]
@@ -158,7 +160,7 @@ class NeighborComputeThread(QtCore.QThread):
 
     def __init__(self, original_image, candidate_dict, pick_side, parent=None):
         """
-        candidate_dict: The *prospective* candidate's parameters (x,y,b,c,sharpen).
+        candidate_dict: The *prospective* candidate's parameters (x,y,b,c,sharpen,color).
         pick_side: "left" or "right" - helps the main widget know which neighbor is done.
         """
         super().__init__(parent)
@@ -170,6 +172,7 @@ class NeighborComputeThread(QtCore.QThread):
         self.brightness = candidate_dict['brightness']
         self.contrast = candidate_dict['contrast']
         self.sharpen = candidate_dict['sharpen']
+        self.color = candidate_dict['color']
 
     def run(self):
         """
@@ -181,29 +184,32 @@ class NeighborComputeThread(QtCore.QThread):
         dx = random.randint(-4, 4)
         dy = random.randint(-4, 4)
 
-        # brightness/contrast/sharpen factor in ~ [0.9..1.1]
+        # brightness/contrast/sharpen/color factor in ~ [0.9..1.1]
         bright_factor = 1.0 + (random.random() - 0.5)*0.2
-        cont_factor = 1.0 + (random.random() - 0.5)*0.2
-        sharp_factor = 1.0 + (random.random() - 0.5)*0.2
+        cont_factor   = 1.0 + (random.random() - 0.5)*0.2
+        sharp_factor  = 1.0 + (random.random() - 0.5)*0.2
+        color_factor  = 1.0 + (random.random() - 0.5)*0.2
 
         new_x = np.clip(self.x + dx, 0,  (ZX_WIDTH+8) - ZX_WIDTH)  # 0..8
         new_y = np.clip(self.y + dy, 0,  (ZX_HEIGHT+8) - ZX_HEIGHT) # 0..8
 
         new_brightness = self.brightness * bright_factor
-        new_contrast   = self.contrast * cont_factor
-        new_sharpen    = self.sharpen * sharp_factor
+        new_contrast   = self.contrast   * cont_factor
+        new_sharpen    = self.sharpen    * sharp_factor
+        new_color      = self.color      * color_factor
 
         # clamp to keep them from going out of hand
-        # e.g. [0.3..3.0]
-        new_brightness = float(np.clip(new_brightness, 0.3, 3.0))
-        new_contrast   = float(np.clip(new_contrast, 0.3, 3.0))
-        new_sharpen    = float(np.clip(new_sharpen, 0.3, 3.0))
+        # e.g. [0.6..6.0]
+        new_brightness = float(np.clip(new_brightness, 0.6, 6.0))
+        new_contrast   = float(np.clip(new_contrast,   0.6, 6.0))
+        new_sharpen    = float(np.clip(new_sharpen,    0.6, 6.0))
+        new_color      = float(np.clip(new_color,      0.6, 6.0))
 
         # Now compute
         zx_image, mixed_count = convert_with_params(
             self.original_image,
             int(new_x), int(new_y),
-            new_brightness, new_contrast, new_sharpen
+            new_brightness, new_contrast, new_sharpen, new_color
         )
 
         # Convert that PIL image to QPixmap
@@ -218,7 +224,8 @@ class NeighborComputeThread(QtCore.QThread):
                 'y': int(new_y),
                 'brightness': new_brightness,
                 'contrast': new_contrast,
-                'sharpen': new_sharpen
+                'sharpen': new_sharpen,
+                'color': new_color
             },
             'pixmap': pixmap,
             'mixed': mixed_count
@@ -238,7 +245,7 @@ class ZXInteractive(QtWidgets.QWidget):
 
     def __init__(self, original_image, output_path):
         super().__init__()
-        self.setWindowTitle("ZX Spectrum Interactive Converter (Pan/B/C/Sharpen)")
+        self.setWindowTitle("ZX Spectrum Interactive Converter (Pan/B/C/Sharpen/Color)")
 
         self.original_image = original_image
         self.output_path = output_path
@@ -247,18 +254,17 @@ class ZXInteractive(QtWidgets.QWidget):
         self.canvas_height = ZX_HEIGHT + 8
 
         # We'll keep track of the "current" candidate vs neighbor
-        # along with the param dict and an associated QPixmap + mixed count
-        # But since we always start from some default candidate, let's do that:
         self.candidate = {
             'x': (self.canvas_width//2 - ZX_WIDTH//2),
             'y': (self.canvas_height//2 - ZX_HEIGHT//2),
             'brightness': 1.0,
             'contrast': 1.0,
             'sharpen': 1.0,
+            'color': 1.0,  # NEW parameter for color
             'pixmap': None,
             'mixed': 0
         }
-        self.neighbor = None  # will be computed synchronously for the first iteration
+        self.neighbor = None
         self.iteration = 0
         self.zoom = True  # default to double-size
 
@@ -269,12 +275,13 @@ class ZXInteractive(QtWidgets.QWidget):
             self.candidate['y'],
             self.candidate['brightness'],
             self.candidate['contrast'],
-            self.candidate['sharpen']
+            self.candidate['sharpen'],
+            self.candidate['color']
         )
         self.candidate['pixmap'] = self.pil_to_qpixmap(base_zx)
         self.candidate['mixed'] = base_mixed
 
-        # For the first iteration, we'll synchronously compute a neighbor
+        # For the first iteration, compute a neighbor synchronously
         self.neighbor = self.sync_generate_neighbor(self.candidate)
 
         # Now we also compute "leftNext" and "rightNext" in background threads
@@ -330,7 +337,6 @@ class ZXInteractive(QtWidgets.QWidget):
         on the user's next pick.
         """
         # If user picks left, the "new candidate" remains self.candidate,
-        # so we generate a neighbor from that.
         self.leftThread = NeighborComputeThread(
             self.original_image,
             self.candidate,
@@ -339,7 +345,7 @@ class ZXInteractive(QtWidgets.QWidget):
         self.leftThread.finishedSignal.connect(self.on_neighbor_ready)
         self.leftThread.start()
 
-        # If user picks right, the "new candidate" becomes self.neighbor’s params
+        # If user picks right, the "new candidate" becomes self.neighbor
         self.rightThread = NeighborComputeThread(
             self.original_image,
             self.neighbor,
@@ -364,13 +370,13 @@ class ZXInteractive(QtWidgets.QWidget):
         """
         Synchronous version used for the very first neighbor so we can display
         something initially. We do the same random logic as the thread would.
-        Returns a param dict for the neighbor.
         """
         dx = random.randint(-4, 4)
         dy = random.randint(-4, 4)
-        bright_factor = 1.0 + (random.random() - 0.5)*0.2
-        cont_factor   = 1.0 + (random.random() - 0.5)*0.2
-        sharp_factor  = 1.0 + (random.random() - 0.5)*0.2
+        bright_factor = 1.0 + (random.random() - 0.5)*2.0
+        cont_factor   = 1.0 + (random.random() - 0.5)*2.0
+        sharp_factor  = 1.0 + (random.random() - 0.5)*2.0
+        color_factor  = 1.0 + (random.random() - 0.5)*2.0
 
         new_x = np.clip(param_dict['x'] + dx, 0, self.canvas_width - ZX_WIDTH)
         new_y = np.clip(param_dict['y'] + dy, 0, self.canvas_height - ZX_HEIGHT)
@@ -378,17 +384,18 @@ class ZXInteractive(QtWidgets.QWidget):
         new_brightness = param_dict['brightness'] * bright_factor
         new_contrast   = param_dict['contrast']   * cont_factor
         new_sharpen    = param_dict['sharpen']    * sharp_factor
+        new_color      = param_dict['color']      * color_factor
 
-        new_brightness = float(np.clip(new_brightness, 0.3, 3.0))
-        new_contrast   = float(np.clip(new_contrast, 0.3, 3.0))
-        new_sharpen    = float(np.clip(new_sharpen, 0.3, 3.0))
+        new_brightness = float(np.clip(new_brightness, 0.9, 9.0))
+        new_contrast   = float(np.clip(new_contrast,   0.9, 9.0))
+        new_sharpen    = float(np.clip(new_sharpen,    0.9, 9.0))
+        new_color      = float(np.clip(new_color,      0.9, 9.0))
 
         zx_image, mixed_count = convert_with_params(
             self.original_image,
             int(new_x), int(new_y),
-            new_brightness, new_contrast, new_sharpen
+            new_brightness, new_contrast, new_sharpen, new_color
         )
-        # Convert to QPixmap
         data = zx_image.convert("RGB").tobytes("raw","RGB")
         qimg = QtGui.QImage(data, zx_image.width, zx_image.height, QtGui.QImage.Format_RGB888)
         pixmap = QtGui.QPixmap.fromImage(qimg)
@@ -399,6 +406,7 @@ class ZXInteractive(QtWidgets.QWidget):
             'brightness': new_brightness,
             'contrast': new_contrast,
             'sharpen': new_sharpen,
+            'color': new_color,
             'pixmap': pixmap,
             'mixed': mixed_count
         }
@@ -421,11 +429,13 @@ class ZXInteractive(QtWidgets.QWidget):
             f"b={self.candidate['brightness']:.2f}, "
             f"c={self.candidate['contrast']:.2f}, "
             f"s={self.candidate['sharpen']:.2f}, "
+            f"color={self.candidate['color']:.2f}, "
             f"mixed={self.candidate['mixed']}\n"
             f"Neighbor:  x={self.neighbor['x']}, y={self.neighbor['y']}, "
             f"b={self.neighbor['brightness']:.2f}, "
             f"c={self.neighbor['contrast']:.2f}, "
             f"s={self.neighbor['sharpen']:.2f}, "
+            f"color={self.neighbor['color']:.2f}, "
             f"mixed={self.neighbor['mixed']}"
         )
 
@@ -437,20 +447,18 @@ class ZXInteractive(QtWidgets.QWidget):
         """
         self.iteration += 1
         # The new candidate is still self.candidate (unchanged).
-        # The new neighbor is whatever "leftNext" was computing.
         if self.leftNext is not None:
-            # build a param dict for neighbor from leftNext
             self.neighbor = {
                 'x':         self.leftNext['params']['x'],
                 'y':         self.leftNext['params']['y'],
                 'brightness': self.leftNext['params']['brightness'],
                 'contrast':   self.leftNext['params']['contrast'],
                 'sharpen':    self.leftNext['params']['sharpen'],
+                'color':      self.leftNext['params']['color'],
                 'pixmap':     self.leftNext['pixmap'],
                 'mixed':      self.leftNext['mixed']
             }
         else:
-            # If the thread hasn't finished (unlikely), do a quick fallback
             self.neighbor = self.sync_generate_neighbor(self.candidate)
 
         # Now spawn new threads for the next iteration
@@ -469,7 +477,6 @@ class ZXInteractive(QtWidgets.QWidget):
         # The new candidate becomes self.neighbor
         self.candidate = self.neighbor
 
-        # The new neighbor is whatever "rightNext" was computing
         if self.rightNext is not None:
             self.neighbor = {
                 'x':         self.rightNext['params']['x'],
@@ -477,11 +484,11 @@ class ZXInteractive(QtWidgets.QWidget):
                 'brightness': self.rightNext['params']['brightness'],
                 'contrast':   self.rightNext['params']['contrast'],
                 'sharpen':    self.rightNext['params']['sharpen'],
+                'color':      self.rightNext['params']['color'],
                 'pixmap':     self.rightNext['pixmap'],
                 'mixed':      self.rightNext['mixed']
             }
         else:
-            # fallback
             self.neighbor = self.sync_generate_neighbor(self.candidate)
 
         # Now spawn new threads for the next iteration
@@ -499,15 +506,15 @@ class ZXInteractive(QtWidgets.QWidget):
         """
         The user is done. Show a final preview, then save to disk.
         """
-        # Convert the candidate to a PIL image again (we already have it in QPixmap).
-        # But let's do it from scratch so there's no risk of compression artifacts.
+        # Convert the candidate to a PIL image again:
         final_img, final_mixed = convert_with_params(
             self.original_image,
             self.candidate['x'],
             self.candidate['y'],
             self.candidate['brightness'],
             self.candidate['contrast'],
-            self.candidate['sharpen']
+            self.candidate['sharpen'],
+            self.candidate['color']
         )
 
         # Save
