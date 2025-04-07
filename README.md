@@ -1,7 +1,3 @@
-Below is a **sample README** you can adapt for a GitHub project. It includes key details on features, installation, dependencies, usage, and how everything fits together. Feel free to tweak the tone, add pictures, or expand on any section to suit your style.
-
----
-
 # ZX Spectrum Interactive Converter
 
 **Convert your images into retro-style ZX Spectrum graphics** with an _infinite hill-climb_ approach. The program dynamically adjusts:
@@ -99,18 +95,7 @@ zx-spectrum-interactive/
 
 ## License
 
-Recommend that you place the project under a permissive license like the [MIT License](https://opensource.org/licenses/MIT). For example:
-
-```
-MIT License
-
-Copyright (c) 2025 Your Name
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-...
-```
-
-(Include the full text in a `LICENSE` file.)
+[MIT License](https://opensource.org/licenses/MIT). 
 
 ## Thanks
 
