@@ -1,4 +1,6 @@
 # ZX Spectrum Interactive Converter
+![Screenshot of ZX Spectrum Conversion](zx_convert_screenshot.png "ZX Spectrum Conversion")
+
 
 **Convert your images into retro-style ZX Spectrum graphics** with an _infinite hill-climb_ approach. The program dynamically adjusts:
 - **Pan** (x & y offsets)
